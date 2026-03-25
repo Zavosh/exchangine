@@ -28,7 +28,6 @@ package ob_pkg;
    // qty is don't-care for CANCEL
    // order_id is don't-care for ADD and MARKET
    typedef struct packed {
-      logic                        valid;
       msg_type_t                   msg_type;
       side_t                       side;
       logic [PRICE_WIDTH-1:0]      price;
@@ -53,7 +52,6 @@ package ob_pkg;
 
    // Maker-taker fill event (execution report)
    typedef struct packed {
-      logic                        valid;
       logic [ORDER_ID_WIDTH-1:0]   maker_id;
       logic [ORDER_ID_WIDTH-1:0]   taker_id;
       logic [QTY_WIDTH-1:0]        fill_qty;
@@ -62,7 +60,6 @@ package ob_pkg;
 
    // Acknowledgement to order submitter for acceptance/rejection
    typedef struct packed {
-      logic                        valid;
       logic [ORDER_ID_WIDTH-1:0]   order_id;
       logic                        accepted;
       msg_type_t                   msg_type;
