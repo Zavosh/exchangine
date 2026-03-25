@@ -3,12 +3,14 @@
 package ob_pkg;
 
    // Book configuration parameters
-   parameter int NUM_PRICE_LEVELS = 8;    // price levels per side
    parameter int NUM_ORDERS = 64;         // total resting order slots across all levels
    parameter int PRICE_WIDTH = 16;        // bits for price, fixed-point in cents
    parameter int QTY_WIDTH = 16;          // bits for quantity
+   parameter int L1_DEPTH = 64;           // number of price level slots in L1 register array per side
+   parameter int OP_BUFFER_DEPTH = 8;     // depth of the unified operation buffer between level_manager and order_pool
 
    localparam int ORDER_ID_WIDTH = $clog2(NUM_ORDERS);     // bits for order ID
+   localparam int L2_DEPTH = 2 ** PRICE_WIDTH;            // number of possible price levels (2^PRICE_WIDTH)
 
    // Message type (add/cancel/market) for incoming order requests
    typedef enum logic [1:0] {
@@ -50,12 +52,30 @@ package ob_pkg;
       logic [ORDER_ID_WIDTH-1:0]   next_order_id;
    } resting_order_t;
 
+   // Operation types issued by level_manager to order_pool via the operation buffer
+   typedef enum logic [1:0] {
+      OP_ADD    = 2'b00,
+      OP_MATCH  = 2'b01,
+      OP_CANCEL = 2'b10
+   } op_type_t;
+
+   // Operation envelope for level_manager to order_pool interaction
+   typedef struct packed {
+      op_type_t                    op_type;
+      logic [ORDER_ID_WIDTH-1:0]   order_id;            // OP_ADD: new slot index; OP_CANCEL: slot to zero; OP_MATCH: taker_id
+      logic [QTY_WIDTH-1:0]        qty;                 // OP_ADD: qty of new order; OP_MATCH: incoming qty; OP_CANCEL: don't-care
+      logic [ORDER_ID_WIDTH-1:0]   list_ptr;            // OP_ADD: tail slot (self-pointer if empty); OP_MATCH: head slot to walk; OP_CANCEL: don't-care
+      logic [PRICE_WIDTH-1:0]      fill_price;          // OP_MATCH only: fill price; don't-care for others
+      side_t                       maker_side;          // OP_MATCH only: maker side for execution_t; don't-care for others
+   } pool_op_t;
+
    // Maker-taker fill event (execution report)
    typedef struct packed {
       logic [ORDER_ID_WIDTH-1:0]   maker_id;
       logic [ORDER_ID_WIDTH-1:0]   taker_id;
       logic [QTY_WIDTH-1:0]        fill_qty;
       logic [PRICE_WIDTH-1:0]      fill_price;
+      side_t                       maker_side;
    } execution_t;
 
    // Acknowledgement to order submitter for acceptance/rejection
