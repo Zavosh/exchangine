@@ -3,13 +3,13 @@
 package ob_pkg;
 
    // Book configuration parameters
-   parameter int NUM_ORDERS = 64;         // total resting order slots across all levels
+   parameter int ORDER_ID_WIDTH = 8;      // bits for order ID
    parameter int PRICE_WIDTH = 16;        // bits for price, fixed-point in cents
    parameter int QTY_WIDTH = 16;          // bits for quantity
    parameter int L1_DEPTH = 64;           // number of price level slots in L1 register array per side
    parameter int OP_BUFFER_DEPTH = 8;     // depth of the unified operation buffer between level_manager and order_pool
 
-   localparam int ORDER_ID_WIDTH = $clog2(NUM_ORDERS);     // bits for order ID
+   localparam int NUM_ORDERS = 2 ** ORDER_ID_WIDTH;       // total resting order slots across all levels
    localparam int L2_DEPTH = 2 ** PRICE_WIDTH;            // number of possible price levels (2^PRICE_WIDTH)
 
    // Message type (add/cancel/market) for incoming order requests
@@ -45,12 +45,29 @@ package ob_pkg;
       logic [ORDER_ID_WIDTH-1:0]   tail_order_id;
    } price_level_t;
 
-   // One resting order in L3; indexed by order_id (order_id and price not in struct)
+   // One resting order in L3; indexed by order_id. (order_id not in struct)
+   // next_order_id is placed at the LSBs deliberately so Port B of the dual-port
+   // BRAM can update it independently using a fixed byte-enable mask of
+   // ORDER_ID_WIDTH/8 least significant bytes.
    typedef struct packed {
       logic                        valid;
+      side_t                       side;
+      logic [PRICE_WIDTH-1:0]      price;
       logic [QTY_WIDTH-1:0]        qty;
-      logic [ORDER_ID_WIDTH-1:0]   next_order_id;
+      logic [ORDER_ID_WIDTH-1:0]   next_order_id; // LSBs — target of Port B byte-enable writes
    } resting_order_t;
+
+   // Writeback from order_pool to level_manager.
+   // Unifies head-pointer updates (from OP_MATCH) and cancel metadata updates (from OP_CANCEL)
+   // into a single interface. level_manager uses price and side to locate the L1/L2 entry,
+   // then branches on is_cancel to determine what to update.
+   typedef struct packed {
+      logic                      is_cancel;  // 1=cancel update (use qty), 0=head update (use order_id)
+      logic [PRICE_WIDTH-1:0]    price;      // price level to update in L1/L2
+      side_t                     side;       // which side of the book to update
+      logic [ORDER_ID_WIDTH-1:0] order_id;   // new head order ID — used when is_cancel=0
+      logic [QTY_WIDTH-1:0]      qty;        // qty to decrement from total_qty — used when is_cancel=1
+   } pool_update_t;
 
    // Operation types issued by level_manager to order_pool via the operation buffer
    typedef enum logic [1:0] {
@@ -64,9 +81,9 @@ package ob_pkg;
       op_type_t                    op_type;
       logic [ORDER_ID_WIDTH-1:0]   order_id;            // OP_ADD: new slot index; OP_CANCEL: slot to zero; OP_MATCH: taker_id
       logic [QTY_WIDTH-1:0]        qty;                 // OP_ADD: qty of new order; OP_MATCH: incoming qty; OP_CANCEL: don't-care
-      logic [ORDER_ID_WIDTH-1:0]   list_ptr;            // OP_ADD: tail slot (self-pointer if empty); OP_MATCH: head slot to walk; OP_CANCEL: don't-care
-      logic [PRICE_WIDTH-1:0]      fill_price;          // OP_MATCH only: fill price; don't-care for others
-      side_t                       maker_side;          // OP_MATCH only: maker side for execution_t; don't-care for others
+      logic [ORDER_ID_WIDTH-1:0]   list_ptr;            // OP_ADD: tail slot (self-pointer if FIFO is empty); OP_MATCH: head slot to walk; OP_CANCEL: don't-care
+      logic [PRICE_WIDTH-1:0]      fill_price;          // OP_ADD: price of new order; OP_MATCH: fill price; OP_CANCEL: don't-care
+      side_t                       maker_side;          // OP_ADD: side of new order; OP_MATCH: maker side for execution_t; OP_CANCEL: don't-care
    } pool_op_t;
 
    // Maker-taker fill event (execution report)
