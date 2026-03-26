@@ -49,7 +49,13 @@ package ob_pkg;
    // next_order_id is placed at the LSBs deliberately so Port B of the dual-port
    // BRAM can update it independently using a fixed byte-enable mask of
    // ORDER_ID_WIDTH/8 least significant bytes.
+   localparam int RESTING_ORDER_BITS_RAW = 1 + $bits(side_t) + PRICE_WIDTH + QTY_WIDTH + ORDER_ID_WIDTH; // Modify as needed when fields are added/removed!
+   localparam int RESTING_ORDER_BYTES    = (RESTING_ORDER_BITS_RAW + 7) / 8;
+   localparam int RESTING_ORDER_PAD      = RESTING_ORDER_BYTES * 8 - RESTING_ORDER_BITS_RAW;
    typedef struct packed {
+      // Modify RESTING_ORDER_BITS_RAW when fields are added/removed from this struct!!!
+      // COMMENT NEXT LINE IFF RESTING_ORDER_PAD == 0 !!!
+      logic [RESTING_ORDER_PAD-1:0]_pad;          // MSBs — padding for byte alignment
       logic                        valid;
       side_t                       side;
       logic [PRICE_WIDTH-1:0]      price;
