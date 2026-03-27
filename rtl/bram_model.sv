@@ -15,21 +15,17 @@ module bram_model #(
     input  logic                       clk,
     input  logic                       rst_n,
     
-    // Port A: Write (posted)
-    input  logic                       a_wr_valid,
-    input  logic [ADDR_WIDTH-1:0]      a_wr_addr,
+    // Port A
+    input  logic                       a_valid,
+    input  logic                       a_wr_en,      // 1=write, 0=read
+    input  logic [ADDR_WIDTH-1:0]      a_addr,
     input  T                           a_wr_data,
-    
-    // Port A: Read with pipeline
-    input  logic                       a_rd_valid,
-    input  logic [ADDR_WIDTH-1:0]      a_rd_addr,
     output T                           a_rd_data,
     output logic                       a_rd_data_valid,
-    output logic                       a_busy,
     
     // Port B: Write with byte enables
-    input  logic                       b_wr_valid,
-    input  logic [ADDR_WIDTH-1:0]      b_wr_addr,
+    input  logic                       b_valid,
+    input  logic [ADDR_WIDTH-1:0]      b_addr,
     input  logic [NUM_BYTES-1:0]       b_wr_byte_en,
     input  T                           b_wr_data
 );
@@ -61,9 +57,9 @@ module bram_model #(
             end
 
             // Read from memory into pipeline stage 0
-            if (a_rd_valid && !a_busy) begin
+            if (a_valid && !a_wr_en) begin
                 pipeline_valid[0] <= 1'b1;
-                pipeline_data[0]  <= mem[a_rd_addr];
+                pipeline_data[0]  <= mem[a_addr];
             end else begin
                 pipeline_valid[0] <= 1'b0;
             end
@@ -74,23 +70,13 @@ module bram_model #(
     assign a_rd_data       = pipeline_data[READ_LATENCY-1];
     assign a_rd_data_valid = pipeline_valid[READ_LATENCY-1];
 
-    // Busy signal: high if pipeline has pending reads
-    logic busy_internal;
-    always_comb begin
-        busy_internal = 1'b0;
-        for (int i = 0; i < READ_LATENCY-1; i++) begin
-            busy_internal = busy_internal | pipeline_valid[i];
-        end
-    end
-    assign a_busy = busy_internal;
-
-    // Port A: Write (posted)
+    // Port A: Write
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             // Memory does not need to be cleared
         end else begin
-            if (a_wr_valid)
-                mem[a_wr_addr] <= a_wr_data;
+            if (a_valid && a_wr_en)
+                mem[a_addr] <= a_wr_data;
         end
     end
 
@@ -100,12 +86,12 @@ module bram_model #(
         if (!rst_n) begin
             // Memory does not need to be cleared
         end else begin
-            if (b_wr_valid) begin
+            if (b_valid) begin
                 // Only proceed if Port A is not writing to the same address
-                if (!(a_wr_valid && a_wr_addr == b_wr_addr)) begin
+                if (!(a_valid && a_wr_en && (a_addr == b_addr))) begin
                     for (int i = 0; i < NUM_BYTES; i++) begin
                         if (b_wr_byte_en[i]) begin
-                            mem[b_wr_addr][i*8 +: 8] <= b_wr_data[i*8 +: 8];
+                            mem[b_addr][i*8 +: 8] <= b_wr_data[i*8 +: 8];
                         end
                     end
                 end
