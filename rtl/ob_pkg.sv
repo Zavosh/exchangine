@@ -77,19 +77,20 @@ package ob_pkg;
 
    // Operation types issued by level_manager to order_pool via the operation buffer
    typedef enum logic [1:0] {
-      OP_ADD    = 2'b00,
-      OP_MATCH  = 2'b01,
-      OP_CANCEL = 2'b10
+      OP_ADD         = 2'b00,
+      OP_MATCH       = 2'b01,
+      OP_CANCEL      = 2'b10,
+      OP_MARKET_FAIL = 2'b11  // MSG_MARKET exhausted book with remaining qty — order_pool emits ack with accepted=0
    } op_type_t;
 
    // Operation envelope for level_manager to order_pool interaction
    typedef struct packed {
       op_type_t                    op_type;
-      logic [ORDER_ID_WIDTH-1:0]   order_id;            // OP_ADD: new slot index; OP_CANCEL: slot to zero; OP_MATCH: taker_id
-      logic [QTY_WIDTH-1:0]        qty;                 // OP_ADD: qty of new order; OP_MATCH: incoming qty; OP_CANCEL: don't-care
-      logic [ORDER_ID_WIDTH-1:0]   list_ptr;            // OP_ADD: tail slot (self-pointer if FIFO is empty); OP_MATCH: head slot to walk; OP_CANCEL: don't-care
-      logic [PRICE_WIDTH-1:0]      fill_price;          // OP_ADD: price of new order; OP_MATCH: fill price; OP_CANCEL: don't-care
-      side_t                       maker_side;          // OP_ADD: side of new order; OP_MATCH: maker side for execution_t; OP_CANCEL: don't-care
+      logic [ORDER_ID_WIDTH-1:0]   order_id;            // OP_ADD: new slot index; OP_CANCEL: slot to zero; OP_MATCH: taker_id; OP_MARKET_FAIL: don't-care
+      logic [QTY_WIDTH-1:0]        qty;                 // OP_ADD: qty of new order; OP_MATCH: incoming qty; OP_CANCEL: don't-care; OP_MARKET_FAIL: wasted remainder
+      logic [ORDER_ID_WIDTH-1:0]   list_ptr;            // OP_ADD: tail slot (self-pointer if FIFO is empty); OP_MATCH: head slot to walk; OP_CANCEL: don't-care; OP_MARKET_FAIL: don't-care
+      logic [PRICE_WIDTH-1:0]      fill_price;          // OP_ADD: price of new order; OP_MATCH: fill price; OP_CANCEL: don't-care; OP_MARKET_FAIL: don't-care
+      side_t                       maker_side;          // OP_ADD: side of new order; OP_MATCH: maker side for execution_t; OP_CANCEL: don't-care; OP_MARKET_FAIL: don't-care
    } pool_op_t;
 
    // Maker-taker fill event (execution report)
@@ -106,6 +107,7 @@ package ob_pkg;
       logic [ORDER_ID_WIDTH-1:0]   order_id;
       logic                        accepted;
       msg_type_t                   msg_type;
+      logic [QTY_WIDTH-1:0]        remaining_qty; // MSG_ADD: resting qty, MSG_CANCEL: qty at cancel time, MSG_MARKET: wasted remainder
    } ack_t;
 
 endpackage
