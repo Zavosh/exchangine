@@ -3,7 +3,7 @@
 package ob_pkg;
 
    // Book configuration parameters
-   parameter int ORDER_ID_WIDTH = 8;      // bits for order ID
+   parameter int ORDER_ID_WIDTH = 8;      // bits for order ID (needs to be multiple of 8)
    parameter int PRICE_WIDTH = 16;        // bits for price, fixed-point in cents
    parameter int QTY_WIDTH = 16;          // bits for quantity
    parameter int L1_DEPTH = 64;           // number of price level slots in L1 register array per side
@@ -63,24 +63,30 @@ package ob_pkg;
       logic [ORDER_ID_WIDTH-1:0]   next_order_id; // LSBs — target of Port B byte-enable writes
    } resting_order_t;
 
-   // Writeback from order_pool to level_manager.
-   // Unifies head-pointer updates (from OP_MATCH) and cancel metadata updates (from OP_CANCEL)
-   // into a single interface. level_manager uses price and side to locate the L1/L2 entry,
-   // then branches on is_cancel to determine what to update.
+   // pool_update_t — writeback from order_pool to level_manager
+   // Emitted once per slot invalidation (valid=0 write) during match walk, and once per cancel completion.
+   // level_manager uses price and side to locate the L1/L2 entry, then branches on is_cancel to determine
+   // what to update. On is_cancel=1, level_manager decrements total_qty at the price level by qty.
+   // On iscancel=0, level_manager pushes freed_order_id to free list.
+   // level_manager updates head pointer only when head_order_id != freed_order_id.
+   // When head_order_id == freed_order_id: level depleted — skip head update to avoid
+   // overwriting a concurrent ADD that may have already set a fresh head pointer.
    typedef struct packed {
-      logic                      is_cancel;  // 1=cancel update (use qty), 0=head update (use order_id)
-      logic [PRICE_WIDTH-1:0]    price;      // price level to update in L1/L2
-      side_t                     side;       // which side of the book to update
-      logic [ORDER_ID_WIDTH-1:0] order_id;   // new head order ID — used when is_cancel=0
-      logic [QTY_WIDTH-1:0]      qty;        // qty to decrement from total_qty — used when is_cancel=1
+      logic                      is_cancel;      // 1=cancel completion, 0=match walk step
+      logic [PRICE_WIDTH-1:0]    price;          // price level to update in L1/L2
+      side_t                     side;           // which side of the book
+      logic [ORDER_ID_WIDTH-1:0] head_order_id;  // new head — equals freed_order_id if level depleted
+      logic [ORDER_ID_WIDTH-1:0] freed_order_id; // slot just set to valid=0 — push to free list
+      logic [QTY_WIDTH-1:0]      qty;            // qty at cancel time — used when is_cancel=1 only
    } pool_update_t;
 
    // Operation types issued by level_manager to order_pool via the operation buffer
-   typedef enum logic [1:0] {
-      OP_ADD         = 2'b00,
-      OP_MATCH       = 2'b01,
-      OP_CANCEL      = 2'b10,
-      OP_MARKET_FAIL = 2'b11  // MSG_MARKET exhausted book with remaining qty — order_pool emits ack with accepted=0
+   typedef enum logic [2:0] {
+      OP_ADD         = 3'b000,  // add resting order to pool
+      OP_MATCH       = 3'b001,  // match incoming order against resting orders
+      OP_CANCEL      = 3'b010,  // cancel resting order by zeroing qty
+      OP_MARKET_FAIL = 3'b011,  // MSG_MARKET exhausted book with remaining qty
+      OP_ADD_FAIL    = 3'b100   // ADD rejected — free list empty (book full)
    } op_type_t;
 
    // Operation envelope for level_manager to order_pool interaction
