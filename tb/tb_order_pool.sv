@@ -88,7 +88,7 @@ module tb_order_pool;
             $display("%t: wait_pool_update waiting (pool_update_valid=%0b)", $time, pool_update_valid);
         end
         pu = pool_update;
-        $display("%t: wait_pool_update got pu is_cancel=%0b price=%0h side=%0b head=%0h freed=%0h qty=%0d", $time, pu.is_cancel, pu.price, pu.side, pu.head_order_id, pu.freed_order_id, pu.qty);
+        $display("%t: wait_pool_update got pu update_type=%0d price=%0h side=%0b head=%0h freed=%0h qty=%0d", $time, pu.update_type, pu.price, pu.side, pu.head_order_id, pu.freed_order_id, pu.qty);
     endtask
 
     task automatic wait_exec(output execution_t ex);
@@ -197,7 +197,7 @@ module tb_order_pool;
 
             // First pool_update (ID_A freed)
             wait_pool_update(pu);
-            assert (pu.is_cancel == 0) else $fatal(1, "FAIL: Scenario 2 — first pool_update is_cancel should be 0");
+            assert (pu.update_type == PU_FREE) else $fatal(1, "FAIL: Scenario 2 — first pool_update update_type should be PU_FREE");
             assert (pu.freed_order_id == ID_A) else $fatal(1, "FAIL: Scenario 2 — first freed_order_id should be ID_A");
             assert (pu.head_order_id == ID_B) else $fatal(1, "FAIL: Scenario 2 — first head_order_id should be ID_B");
 
@@ -210,7 +210,7 @@ module tb_order_pool;
 
             // Second pool_update (ID_B freed, level depleted)
             wait_pool_update(pu);
-            assert (pu.is_cancel == 0) else $fatal(1, "FAIL: Scenario 2 — second pool_update is_cancel should be 0");
+            assert (pu.update_type == PU_BOTH) else $fatal(1, "FAIL: Scenario 2 — second pool_update update_type should be PU_BOTH");
             assert (pu.freed_order_id == ID_B) else $fatal(1, "FAIL: Scenario 2 — second freed_order_id should be ID_B");
             assert (pu.head_order_id == ID_B) else $fatal(1, "FAIL: Scenario 2 — second head_order_id should equal freed (level depleted)");
 
@@ -296,7 +296,7 @@ module tb_order_pool;
             send_op(op);
 
             wait_pool_update(pu);
-            assert (pu.is_cancel == 1) else $fatal(1, "FAIL: Scenario 5 — pool_update is_cancel should be 1");
+            assert (pu.update_type == PU_CANCEL) else $fatal(1, "FAIL: Scenario 5 — pool_update update_type should be PU_CANCEL");
             assert (pu.price == TEST_PRICE_BID) else $fatal(1, "FAIL: Scenario 5 — pool_update price mismatch");
             assert (pu.side == SIDE_BID) else $fatal(1, "FAIL: Scenario 5 — pool_update side mismatch");
             assert (pu.qty == 10) else $fatal(1, "FAIL: Scenario 5 — pool_update qty should be 10");
@@ -384,6 +384,7 @@ module tb_order_pool;
             send_op(op);
 
             wait_pool_update(pu);
+            assert (pu.update_type == PU_CANCEL) else $fatal(1, "FAIL: Scenario 7 — second pool_update update_type should be PU_CANCEL");
             assert (pu.qty == 0) else $fatal(1, "FAIL: Scenario 7 — second pool_update qty should be 0");
 
             wait_ack(ack);
@@ -432,7 +433,7 @@ module tb_order_pool;
             assert (exec.maker_side == SIDE_ASK) else $fatal(1, "FAIL: Scenario 8 — maker_side mismatch");
 
             wait_pool_update(pu);
-            assert (pu.is_cancel == 0) else $fatal(1, "FAIL: Scenario 8 — pool_update is_cancel should be 0");
+            assert (pu.update_type == PU_BOTH) else $fatal(1, "FAIL: Scenario 8 — pool_update update_type should be PU_BOTH");
             assert (pu.freed_order_id == ID_A) else $fatal(1, "FAIL: Scenario 8 — freed_order_id should be ID_A");
             assert (pu.head_order_id == ID_A) else $fatal(1, "FAIL: Scenario 8 — head_order_id should equal freed (tail depleted)");
 
@@ -539,6 +540,7 @@ module tb_order_pool;
 
             // First pool_update
             wait_pool_update(pu);
+            assert (pu.update_type == PU_FREE) else $fatal(1, "FAIL: Scenario 10 — first pool_update update_type should be PU_FREE");
             assert (pu.freed_order_id == ID_A) else $fatal(1, "FAIL: Scenario 10 — first freed_order_id should be ID_A");
             assert (pu.head_order_id == ID_B) else $fatal(1, "FAIL: Scenario 10 — first head_order_id should be ID_B");
 
@@ -549,6 +551,7 @@ module tb_order_pool;
 
             // Second pool_update
             wait_pool_update(pu);
+            assert (pu.update_type == PU_BOTH) else $fatal(1, "FAIL: Scenario 10 — second pool_update update_type should be PU_BOTH");
             assert (pu.freed_order_id == ID_B) else $fatal(1, "FAIL: Scenario 10 — second freed_order_id should be ID_B");
             assert (pu.head_order_id == ID_B) else $fatal(1, "FAIL: Scenario 10 — second head_order_id should equal freed (tail depleted)");
 
@@ -607,6 +610,7 @@ module tb_order_pool;
 
             // First pool_update
             wait_pool_update(pu);
+            assert (pu.update_type == PU_FREE) else $fatal(1, "FAIL: Scenario 11 — pool_update update_type should be PU_FREE");
             assert (pu.freed_order_id == ID_A) else $fatal(1, "FAIL: Scenario 11 — freed_order_id should be ID_A");
             assert (pu.head_order_id == ID_B) else $fatal(1, "FAIL: Scenario 11 — head_order_id should be ID_B");
 
@@ -685,6 +689,7 @@ module tb_order_pool;
 
             // Should skip ID_A and find ID_B
             wait_pool_update(pu);
+            assert (pu.update_type == PU_FREE) else $fatal(1, "FAIL: Scenario 12 — pool_update update_type should be PU_FREE");
             assert (pu.freed_order_id == ID_A) else $fatal(1, "FAIL: Scenario 12 — should free cancelled slot ID_A");
             assert (pu.head_order_id == ID_B) else $fatal(1, "FAIL: Scenario 12 — head should advance to ID_B");
 

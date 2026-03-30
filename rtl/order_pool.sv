@@ -174,14 +174,14 @@ module order_pool
                         a_wr_data.qty = '0;
                         // Emit pool_update
                         pool_update_valid = 1'b1;
-                        pool_update = '{is_cancel:1'b1, price:a_rd_data.price, side:a_rd_data.side, qty:a_rd_data.qty, default:'0};
+                        pool_update = '{update_type:PU_CANCEL, price:a_rd_data.price, side:a_rd_data.side, qty:a_rd_data.qty, default:'0};
                         // Emit ack
                         ack_valid = 1'b1;
                         ack_out = '{order_id:cur_op.order_id, accepted:1'b1, msg_type:MSG_CANCEL, remaining_qty:a_rd_data.qty};
                     end else begin
                         // Emit pool_update
                         pool_update_valid = 1'b1;
-                        pool_update.is_cancel = 1'b1;
+                        pool_update.update_type = PU_CANCEL;
                         pool_update.qty = '0;
                         // Emit ack
                         ack_valid = 1'b1;
@@ -208,7 +208,7 @@ module order_pool
                             b_wr_data = a_rd_data;
                             b_wr_data.valid = 1'b0;
                             pool_update_valid = 1'b1;
-                            pool_update = '{is_cancel:1'b0, price:a_rd_data.price, side:a_rd_data.side, head_order_id:a_rd_data.next_order_id, freed_order_id:cur_order_id, default:'0};
+                            pool_update = '{update_type:(remaining_qty == fill_qty) ? PU_BOTH : PU_FREE, price:a_rd_data.price, side:a_rd_data.side, head_order_id:a_rd_data.next_order_id, freed_order_id:cur_order_id, default:'0};
                             assert final (a_rd_data.next_order_id != cur_order_id || remaining_qty == fill_qty)
                                 else $fatal(1, "order_pool: tail consumed with remaining_qty > 0 — level_manager total_qty inconsistency");
                         end
@@ -220,6 +220,8 @@ module order_pool
                                 b_wr_byte_en = BE_ALL;
                                 b_wr_data = a_rd_data;
                                 b_wr_data.qty = a_rd_data.qty - fill_qty;
+                                pool_update_valid = 1'b1;
+                                pool_update = '{update_type:PU_HEAD, price:a_rd_data.price, side:a_rd_data.side, head_order_id:cur_order_id, default:'0};
                             end
                             nc_state = IDLE;
                         end

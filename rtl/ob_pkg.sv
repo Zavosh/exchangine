@@ -63,16 +63,17 @@ package ob_pkg;
       logic [ORDER_ID_WIDTH-1:0]   next_order_id; // LSBs — target of Port B byte-enable writes
    } resting_order_t;
 
-   // pool_update_t — writeback from order_pool to level_manager
-   // Emitted once per slot invalidation (valid=0 write) during match walk, and once per cancel completion.
-   // level_manager uses price and side to locate the L1/L2 entry, then branches on is_cancel to determine
-   // what to update. On is_cancel=1, level_manager decrements total_qty at the price level by qty.
-   // On iscancel=0, level_manager pushes freed_order_id to free list.
-   // level_manager updates head pointer only when head_order_id != freed_order_id.
-   // When head_order_id == freed_order_id: level depleted — skip head update to avoid
-   // overwriting a concurrent ADD that may have already set a fresh head pointer.
+   // Types of updates to L1/L2 price levels emitted by order_pool to level_manager via the pool_update
+   typedef enum logic [1:0] {
+      PU_CANCEL = 2'b00,  // cancel completion — level_manager decrements total_qty at the price level by qty.
+      PU_FREE   = 2'b01,   // free maker slot — level_manager pushes freed_order_id to free list.
+      PU_HEAD   = 2'b10,    // head update — level_manager updates head pointer to head_order_id.
+      PU_BOTH   = 2'b11     // free maker slot + head update — level_manager pushes freed_order_id to free list and updates head pointer to head_order_id.
+   } pool_update_type_t;
+
+   // pool_update_t — writeback from order_pool to level_manager.
    typedef struct packed {
-      logic                      is_cancel;      // 1=cancel completion, 0=match walk step
+      pool_update_type_t         update_type;
       logic [PRICE_WIDTH-1:0]    price;          // price level to update in L1/L2
       side_t                     side;           // which side of the book
       logic [ORDER_ID_WIDTH-1:0] head_order_id;  // new head — equals freed_order_id if level depleted
