@@ -39,10 +39,9 @@ package ob_pkg;
 
    // One price level in L1/L2; indexed by price index (price value not in struct)
    typedef struct packed {
-      logic                        valid;
       logic [QTY_WIDTH-1:0]        total_qty;
-      logic [ORDER_ID_WIDTH-1:0]   head_order_id;
       logic [ORDER_ID_WIDTH-1:0]   tail_order_id;
+      logic [ORDER_ID_WIDTH-1:0]   head_order_id;
    } price_level_t;
 
    // One resting order in L3; indexed by order_id. (order_id not in struct)
