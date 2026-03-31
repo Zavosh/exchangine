@@ -208,7 +208,11 @@ module order_pool
                             b_wr_data = a_rd_data;
                             b_wr_data.valid = 1'b0;
                             pool_update_valid = 1'b1;
-                            pool_update = '{update_type:(remaining_qty == fill_qty) ? PU_BOTH : PU_FREE, price:a_rd_data.price, side:a_rd_data.side, head_order_id:a_rd_data.next_order_id, freed_order_id:cur_order_id, default:'0};
+                            pool_update = '{update_type: PU_FREE, price:a_rd_data.price, side:a_rd_data.side, freed_order_id:cur_order_id, default:'0};
+                            if (remaining_qty == fill_qty && a_rd_data.next_order_id != cur_order_id) begin
+                                pool_update.update_type = PU_BOTH;
+                                pool_update.head_order_id = a_rd_data.next_order_id;
+                            end
                             assert final (a_rd_data.next_order_id != cur_order_id || remaining_qty == fill_qty)
                                 else $fatal(1, "order_pool: tail consumed with remaining_qty > 0 — level_manager total_qty inconsistency");
                         end
