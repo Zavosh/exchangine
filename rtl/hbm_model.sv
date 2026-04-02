@@ -4,7 +4,9 @@
 // Port C: regular read + byte-enable write for pool update handling
 // Known limitation: one outstanding read at a time per port
 // Known limitation: write-during-read to same address returns pre-write value (no forwarding)
-// Known limitation: Port A > Port B > Port C write priority on address collision
+// Known limitation: Ports cannot write to the same address in the same cycle, with the following exception:
+//       If Port B and Port C write to the same address in the same cycle with non-overlapping byte enables,
+//       the writes will be merged instead of causing a conflict (but still cannot conflict with an active Port A burst write)
 
 module hbm_model #(
     parameter type T               = logic [7:0],
@@ -199,26 +201,48 @@ module hbm_model #(
     end
 
     // Write arbitration logic
-    always_ff @(posedge clk) begin
-        // Port A write (highest priority)
-        if (a_wr_valid) begin
-            mem[a_wr_addr_eff] <= a_wr_data;
-        end
-
-        // Port B write (if not conflicting with A)
-        if (b_wr_valid && !(a_wr_valid && a_wr_addr_eff == b_wr_addr)) begin
-            for (int i = 0; i < NUM_BYTES; i++) begin
-                if (b_wr_byte_en[i]) begin
-                    mem[b_wr_addr][i*8 +: 8] <= b_wr_data[i*8 +: 8];
-                end
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            // No reset needed for memory contents
+        end else begin
+            // Port A write
+            if (a_wr_valid) begin
+                mem[a_wr_addr_eff] <= a_wr_data;
             end
-        end
 
-        // Port C write (if not conflicting with A or B)
-        if (c_wr_valid && !(a_wr_valid && a_wr_addr_eff == c_wr_addr) && !(b_wr_valid && b_wr_addr == c_wr_addr)) begin
-            for (int i = 0; i < NUM_BYTES; i++) begin
-                if (c_wr_byte_en[i]) begin
-                    mem[c_wr_addr][i*8 +: 8] <= c_wr_data[i*8 +: 8];
+            if (b_wr_valid && c_wr_valid && b_wr_addr == c_wr_addr && (b_wr_byte_en & c_wr_byte_en) == '0) begin
+                assert final (!(a_wr_valid && a_wr_addr_eff == b_wr_addr))
+                    else $fatal(1, "hbm_model: Port B and Port C write addresses conflict with active Port A burst write address");
+                // If Port B and Port C writes to the same address with non-overlapping byte enables, merge them
+                for (int i = 0; i < NUM_BYTES; i++) begin
+                    if (b_wr_byte_en[i]) begin
+                        mem[b_wr_addr][i*8 +: 8] <= b_wr_data[i*8 +: 8];
+                    end else if (c_wr_byte_en[i]) begin
+                        mem[c_wr_addr][i*8 +: 8] <= c_wr_data[i*8 +: 8];
+                    end
+                end
+            end else begin
+                // Port B write
+                if (b_wr_valid) begin
+                    assert final (!(a_wr_valid && a_wr_addr_eff == b_wr_addr))
+                        else $fatal(1, "hbm_model: Port B write address conflicts with active Port A burst write address");
+                    for (int i = 0; i < NUM_BYTES; i++) begin
+                        if (b_wr_byte_en[i]) begin
+                            mem[b_wr_addr][i*8 +: 8] <= b_wr_data[i*8 +: 8];
+                        end
+                    end
+                end
+                // Port C write
+                if (c_wr_valid) begin
+                    assert final (!(a_wr_valid && a_wr_addr_eff == c_wr_addr))
+                        else $fatal(1, "hbm_model: Port C write address conflicts with active Port A burst write address");
+                    assert final (!(b_wr_valid && b_wr_addr == c_wr_addr))
+                        else $fatal(1, "hbm_model: Port C write address conflicts with active Port B write address");
+                    for (int i = 0; i < NUM_BYTES; i++) begin
+                        if (c_wr_byte_en[i]) begin
+                            mem[c_wr_addr][i*8 +: 8] <= c_wr_data[i*8 +: 8];
+                        end
+                    end
                 end
             end
         end
