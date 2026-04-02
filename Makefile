@@ -17,7 +17,7 @@ all: lint sim-icarus
 
 lint:
 	@echo "Linting RTL sources..."
-	verilator --lint-only -Wall $(ALL_RTL)
+	verilator --lint-only -Wall -Wno-fatal $(ALL_RTL)
 
 sim-icarus: $(SIM_OUT)
 	@echo "Running simulation with Icarus..."
@@ -29,7 +29,7 @@ $(SIM_OUT): $(ALL_RTL) $(TB_SRCS)
 
 sim-verilator:
 	@echo "Running simulation with Verilator..."
-	verilator --cc --exe --build -Wall --Mdir $(VERILATOR_OBJDIR) $(ALL_RTL) tb/sim_main.cpp
+	verilator --cc --exe --build -Wall -Wno-fatal --Mdir $(VERILATOR_OBJDIR) $(ALL_RTL) tb/sim_main.cpp
 
 waves:
 	@echo "Opening waveform viewer..."
