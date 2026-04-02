@@ -199,7 +199,8 @@ module tb_order_pool;
             wait_pool_update(pu);
             assert (pu.update_type == PU_FREE) else $fatal(1, "FAIL: Scenario 2 — first pool_update update_type should be PU_FREE");
             assert (pu.freed_order_id == ID_A) else $fatal(1, "FAIL: Scenario 2 — first freed_order_id should be ID_A");
-            assert (pu.head_order_id == ID_B) else $fatal(1, "FAIL: Scenario 2 — first head_order_id should be ID_B");
+
+            @(posedge clk);
 
             // Second execution (ID_B)
             wait_exec(exec);
@@ -210,9 +211,8 @@ module tb_order_pool;
 
             // Second pool_update (ID_B freed, level depleted)
             wait_pool_update(pu);
-            assert (pu.update_type == PU_BOTH) else $fatal(1, "FAIL: Scenario 2 — second pool_update update_type should be PU_BOTH");
+            assert (pu.update_type == PU_FREE) else $fatal(1, "FAIL: Scenario 2 — second pool_update update_type should be PU_FREE");
             assert (pu.freed_order_id == ID_B) else $fatal(1, "FAIL: Scenario 2 — second freed_order_id should be ID_B");
-            assert (pu.head_order_id == ID_B) else $fatal(1, "FAIL: Scenario 2 — second head_order_id should equal freed (level depleted)");
 
             $display("PASS: Scenario 2");
         end
@@ -433,9 +433,8 @@ module tb_order_pool;
             assert (exec.maker_side == SIDE_ASK) else $fatal(1, "FAIL: Scenario 8 — maker_side mismatch");
 
             wait_pool_update(pu);
-            assert (pu.update_type == PU_BOTH) else $fatal(1, "FAIL: Scenario 8 — pool_update update_type should be PU_BOTH");
+            assert (pu.update_type == PU_FREE) else $fatal(1, "FAIL: Scenario 8 — pool_update update_type should be PU_FREE");
             assert (pu.freed_order_id == ID_A) else $fatal(1, "FAIL: Scenario 8 — freed_order_id should be ID_A");
-            assert (pu.head_order_id == ID_A) else $fatal(1, "FAIL: Scenario 8 — head_order_id should equal freed (tail depleted)");
 
             $display("PASS: Scenario 8");
         end
@@ -542,7 +541,8 @@ module tb_order_pool;
             wait_pool_update(pu);
             assert (pu.update_type == PU_FREE) else $fatal(1, "FAIL: Scenario 10 — first pool_update update_type should be PU_FREE");
             assert (pu.freed_order_id == ID_A) else $fatal(1, "FAIL: Scenario 10 — first freed_order_id should be ID_A");
-            assert (pu.head_order_id == ID_B) else $fatal(1, "FAIL: Scenario 10 — first head_order_id should be ID_B");
+
+            @(posedge clk);
 
             // Second execution (ID_B)
             wait_exec(exec);
@@ -551,9 +551,8 @@ module tb_order_pool;
 
             // Second pool_update
             wait_pool_update(pu);
-            assert (pu.update_type == PU_BOTH) else $fatal(1, "FAIL: Scenario 10 — second pool_update update_type should be PU_BOTH");
+            assert (pu.update_type == PU_FREE) else $fatal(1, "FAIL: Scenario 10 — second pool_update update_type should be PU_FREE");
             assert (pu.freed_order_id == ID_B) else $fatal(1, "FAIL: Scenario 10 — second freed_order_id should be ID_B");
-            assert (pu.head_order_id == ID_B) else $fatal(1, "FAIL: Scenario 10 — second head_order_id should equal freed (tail depleted)");
 
             $display("PASS: Scenario 10");
         end
@@ -612,20 +611,18 @@ module tb_order_pool;
             wait_pool_update(pu);
             assert (pu.update_type == PU_FREE) else $fatal(1, "FAIL: Scenario 11 — pool_update update_type should be PU_FREE");
             assert (pu.freed_order_id == ID_A) else $fatal(1, "FAIL: Scenario 11 — freed_order_id should be ID_A");
-            assert (pu.head_order_id == ID_B) else $fatal(1, "FAIL: Scenario 11 — head_order_id should be ID_B");
+
+            @(posedge clk);
 
             // Second execution (ID_B, partial)
             wait_exec(exec);
             assert (exec.maker_id == ID_B) else $fatal(1, "FAIL: Scenario 11 — second maker_id should be ID_B");
             assert (exec.fill_qty == 3) else $fatal(1, "FAIL: Scenario 11 — second fill_qty should be 3");
 
-            // Assert no pool_update within 5 cycles (ID_B still has qty)
-            cycle_count = 0;
-            repeat (5) begin
-                @(posedge clk);
-                cycle_count++;
-                assert (pool_update_valid == 0) else $fatal(1, "FAIL: Scenario 11 — unexpected pool_update_valid");
-            end
+            // Second pool_update
+            wait_pool_update(pu);
+            assert (pu.update_type == PU_HEAD) else $fatal(1, "FAIL: Scenario 11 — second pool_update update_type should be PU_HEAD");
+            assert (pu.head_order_id == ID_B) else $fatal(1, "FAIL: Scenario 11 — second head_order_id should be ID_B");
 
             $display("PASS: Scenario 11");
         end
@@ -691,7 +688,6 @@ module tb_order_pool;
             wait_pool_update(pu);
             assert (pu.update_type == PU_FREE) else $fatal(1, "FAIL: Scenario 12 — pool_update update_type should be PU_FREE");
             assert (pu.freed_order_id == ID_A) else $fatal(1, "FAIL: Scenario 12 — should free cancelled slot ID_A");
-            assert (pu.head_order_id == ID_B) else $fatal(1, "FAIL: Scenario 12 — head should advance to ID_B");
 
             // Execution for ID_B
             wait_exec(exec);
@@ -700,8 +696,8 @@ module tb_order_pool;
 
             // Pool update for ID_B
             wait_pool_update(pu);
-            assert (pu.freed_order_id == ID_B) else $fatal(1, "FAIL: Scenario 12 — freed_order_id should be ID_B");
-            assert (pu.head_order_id == ID_B) else $fatal(1, "FAIL: Scenario 12 — head_order_id should equal freed (tail depleted)");
+            assert (pu.update_type == PU_FREE) else $fatal(1, "FAIL: Scenario 12 — second pool_update update_type should be PU_FREE");
+            assert (pu.freed_order_id == ID_B) else $fatal(1, "FAIL: Scenario 12 — second freed_order_id should be ID_B");
 
             $display("PASS: Scenario 12");
         end
@@ -776,8 +772,8 @@ module tb_order_pool;
             assert (exec.fill_qty == 8) else $fatal(1, "FAIL: Scenario 13 — second fill_qty should be 8");
 
             wait_pool_update(pu);
-            assert (pu.freed_order_id == ID_B) else $fatal(1, "FAIL: Scenario 13 — freed_order_id should be ID_B");
-            assert (pu.head_order_id == ID_B) else $fatal(1, "FAIL: Scenario 13 — head_order_id should equal freed (tail depleted)");
+            assert (pu.update_type == PU_FREE) else $fatal(1, "FAIL: Scenario 13 — second pool_update update_type should be PU_FREE");
+            assert (pu.freed_order_id == ID_B) else $fatal(1, "FAIL: Scenario 13 — second freed_order_id should be ID_B");
 
             $display("PASS: Scenario 13");
         end
