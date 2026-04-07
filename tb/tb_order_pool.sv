@@ -137,7 +137,7 @@ module tb_order_pool;
                 op_type: OP_ADD,
                 order_id: ID_A,
                 qty: 10,
-                list_ptr: ID_A,
+                list_ptr: NULL_PTR,
                 fill_price: TEST_PRICE_BID,
                 maker_side: SIDE_BID
             };
@@ -195,10 +195,11 @@ module tb_order_pool;
             assert (exec.fill_qty == 10) else $fatal(1, "FAIL: Scenario 2 — first fill_qty should be 10");
             assert (exec.fill_price == TEST_PRICE_BID) else $fatal(1, "FAIL: Scenario 2 — first fill_price mismatch");
 
-            // First pool_update (ID_A freed)
+            // First pool_update (ID_A freed, head advanced to ID_B)
             wait_pool_update(pu);
-            assert (pu.update_type == PU_FREE) else $fatal(1, "FAIL: Scenario 2 — first pool_update update_type should be PU_FREE");
+            assert (pu.update_type == PU_BOTH) else $fatal(1, "FAIL: Scenario 2 — first pool_update update_type should be PU_BOTH");
             assert (pu.freed_order_id == ID_A) else $fatal(1, "FAIL: Scenario 2 — first freed_order_id should be ID_A");
+            assert (pu.head_order_id == ID_B) else $fatal(1, "FAIL: Scenario 2 — first head_order_id should be ID_B");
 
             @(posedge clk);
 
@@ -211,8 +212,9 @@ module tb_order_pool;
 
             // Second pool_update (ID_B freed, level depleted)
             wait_pool_update(pu);
-            assert (pu.update_type == PU_FREE) else $fatal(1, "FAIL: Scenario 2 — second pool_update update_type should be PU_FREE");
+            assert (pu.update_type == PU_BOTH) else $fatal(1, "FAIL: Scenario 2 — second pool_update update_type should be PU_BOTH");
             assert (pu.freed_order_id == ID_B) else $fatal(1, "FAIL: Scenario 2 — second freed_order_id should be ID_B");
+            assert (pu.head_order_id == NULL_PTR) else $fatal(1, "FAIL: Scenario 2 — second head_order_id should be NULL_PTR");
 
             $display("PASS: Scenario 2");
         end
@@ -227,7 +229,7 @@ module tb_order_pool;
                 op_type: OP_ADD_FAIL,
                 order_id: ID_C,
                 qty: 7,
-                list_ptr: '0,
+                list_ptr: NULL_PTR,
                 fill_price: TEST_PRICE_BID,
                 maker_side: SIDE_BID
             };
@@ -241,6 +243,38 @@ module tb_order_pool;
             $display("PASS: Scenario 3");
         end
 
+        // ===== SCENARIO 3A: OP_ADD_FIRST emits head update =====
+        begin
+            pool_op_t op;
+            ack_t ack;
+            pool_update_t pu;
+
+            $display("[TEST] Scenario 3A: OP_ADD_FIRST emits PU_HEAD");
+            op = '{
+                op_type: OP_ADD_FIRST,
+                order_id: ID_C,
+                qty: 9,
+                list_ptr: NULL_PTR,
+                fill_price: TEST_PRICE_ASK,
+                maker_side: SIDE_ASK
+            };
+            send_op(op);
+            wait_ack(ack);
+
+            assert (ack.accepted == 1) else $fatal(1, "FAIL: Scenario 3A — accepted should be 1");
+            assert (ack.order_id == ID_C) else $fatal(1, "FAIL: Scenario 3A — order_id mismatch");
+            assert (ack.msg_type == MSG_ADD) else $fatal(1, "FAIL: Scenario 3A — msg_type should be MSG_ADD");
+            assert (ack.remaining_qty == 9) else $fatal(1, "FAIL: Scenario 3A — remaining_qty should be 9");
+
+            wait_pool_update(pu);
+            assert (pu.update_type == PU_HEAD) else $fatal(1, "FAIL: Scenario 3A — pool_update update_type should be PU_HEAD");
+            assert (pu.price == TEST_PRICE_ASK) else $fatal(1, "FAIL: Scenario 3A — pool_update price mismatch");
+            assert (pu.side == SIDE_ASK) else $fatal(1, "FAIL: Scenario 3A — pool_update side mismatch");
+            assert (pu.head_order_id == ID_C) else $fatal(1, "FAIL: Scenario 3A — pool_update head_order_id should be ID_C");
+
+            $display("PASS: Scenario 3A");
+        end
+
         // ===== SCENARIO 4: OP_MARKET_FAIL =====
         begin
             pool_op_t op;
@@ -251,7 +285,7 @@ module tb_order_pool;
                 op_type: OP_MARKET_FAIL,
                 order_id: ID_T1,
                 qty: 20,
-                list_ptr: '0,
+                list_ptr: NULL_PTR,
                 fill_price: '0,
                 maker_side: SIDE_BID
             };
@@ -277,7 +311,7 @@ module tb_order_pool;
                 op_type: OP_ADD,
                 order_id: ID_A,
                 qty: 10,
-                list_ptr: ID_A,
+                list_ptr: NULL_PTR,
                 fill_price: TEST_PRICE_BID,
                 maker_side: SIDE_BID
             };
@@ -289,7 +323,7 @@ module tb_order_pool;
                 op_type: OP_CANCEL,
                 order_id: ID_A,
                 qty: '0,
-                list_ptr: '0,
+                list_ptr: NULL_PTR,
                 fill_price: '0,
                 maker_side: SIDE_BID
             };
@@ -322,7 +356,7 @@ module tb_order_pool;
                 op_type: OP_CANCEL,
                 order_id: 8'hFF,
                 qty: '0,
-                list_ptr: '0,
+                list_ptr: NULL_PTR,
                 fill_price: '0,
                 maker_side: SIDE_BID
             };
@@ -352,7 +386,7 @@ module tb_order_pool;
                 op_type: OP_ADD,
                 order_id: ID_A,
                 qty: 10,
-                list_ptr: ID_A,
+                list_ptr: NULL_PTR,
                 fill_price: TEST_PRICE_BID,
                 maker_side: SIDE_BID
             };
@@ -364,7 +398,7 @@ module tb_order_pool;
                 op_type: OP_CANCEL,
                 order_id: ID_A,
                 qty: '0,
-                list_ptr: '0,
+                list_ptr: NULL_PTR,
                 fill_price: '0,
                 maker_side: SIDE_BID
             };
@@ -377,7 +411,7 @@ module tb_order_pool;
                 op_type: OP_CANCEL,
                 order_id: ID_A,
                 qty: '0,
-                list_ptr: '0,
+                list_ptr: NULL_PTR,
                 fill_price: '0,
                 maker_side: SIDE_BID
             };
@@ -407,7 +441,7 @@ module tb_order_pool;
                 op_type: OP_ADD,
                 order_id: ID_A,
                 qty: 10,
-                list_ptr: ID_A,
+                list_ptr: NULL_PTR,
                 fill_price: TEST_PRICE_ASK,
                 maker_side: SIDE_ASK
             };
@@ -433,8 +467,9 @@ module tb_order_pool;
             assert (exec.maker_side == SIDE_ASK) else $fatal(1, "FAIL: Scenario 8 — maker_side mismatch");
 
             wait_pool_update(pu);
-            assert (pu.update_type == PU_FREE) else $fatal(1, "FAIL: Scenario 8 — pool_update update_type should be PU_FREE");
+            assert (pu.update_type == PU_BOTH) else $fatal(1, "FAIL: Scenario 8 — pool_update update_type should be PU_BOTH");
             assert (pu.freed_order_id == ID_A) else $fatal(1, "FAIL: Scenario 8 — freed_order_id should be ID_A");
+            assert (pu.head_order_id == NULL_PTR) else $fatal(1, "FAIL: Scenario 8 — head_order_id should be NULL_PTR");
 
             $display("PASS: Scenario 8");
         end
@@ -453,7 +488,7 @@ module tb_order_pool;
                 op_type: OP_ADD,
                 order_id: ID_A,
                 qty: 10,
-                list_ptr: ID_A,
+                list_ptr: NULL_PTR,
                 fill_price: TEST_PRICE_ASK,
                 maker_side: SIDE_ASK
             };
@@ -502,7 +537,7 @@ module tb_order_pool;
                 op_type: OP_ADD,
                 order_id: ID_A,
                 qty: 5,
-                list_ptr: ID_A,
+                list_ptr: NULL_PTR,
                 fill_price: TEST_PRICE_BID,
                 maker_side: SIDE_BID
             };
@@ -539,8 +574,9 @@ module tb_order_pool;
 
             // First pool_update
             wait_pool_update(pu);
-            assert (pu.update_type == PU_FREE) else $fatal(1, "FAIL: Scenario 10 — first pool_update update_type should be PU_FREE");
+            assert (pu.update_type == PU_BOTH) else $fatal(1, "FAIL: Scenario 10 — first pool_update update_type should be PU_BOTH");
             assert (pu.freed_order_id == ID_A) else $fatal(1, "FAIL: Scenario 10 — first freed_order_id should be ID_A");
+            assert (pu.head_order_id == ID_B) else $fatal(1, "FAIL: Scenario 10 — first head_order_id should be ID_B");
 
             @(posedge clk);
 
@@ -551,8 +587,9 @@ module tb_order_pool;
 
             // Second pool_update
             wait_pool_update(pu);
-            assert (pu.update_type == PU_FREE) else $fatal(1, "FAIL: Scenario 10 — second pool_update update_type should be PU_FREE");
+            assert (pu.update_type == PU_BOTH) else $fatal(1, "FAIL: Scenario 10 — second pool_update update_type should be PU_BOTH");
             assert (pu.freed_order_id == ID_B) else $fatal(1, "FAIL: Scenario 10 — second freed_order_id should be ID_B");
+            assert (pu.head_order_id == NULL_PTR) else $fatal(1, "FAIL: Scenario 10 — second head_order_id should be NULL_PTR");
 
             $display("PASS: Scenario 10");
         end
@@ -572,7 +609,7 @@ module tb_order_pool;
                 op_type: OP_ADD,
                 order_id: ID_A,
                 qty: 5,
-                list_ptr: ID_A,
+                list_ptr: NULL_PTR,
                 fill_price: TEST_PRICE_BID,
                 maker_side: SIDE_BID
             };
@@ -609,8 +646,9 @@ module tb_order_pool;
 
             // First pool_update
             wait_pool_update(pu);
-            assert (pu.update_type == PU_FREE) else $fatal(1, "FAIL: Scenario 11 — pool_update update_type should be PU_FREE");
+            assert (pu.update_type == PU_BOTH) else $fatal(1, "FAIL: Scenario 11 — pool_update update_type should be PU_BOTH");
             assert (pu.freed_order_id == ID_A) else $fatal(1, "FAIL: Scenario 11 — freed_order_id should be ID_A");
+            assert (pu.head_order_id == ID_B) else $fatal(1, "FAIL: Scenario 11 — head_order_id should be ID_B");
 
             @(posedge clk);
 
@@ -619,10 +657,13 @@ module tb_order_pool;
             assert (exec.maker_id == ID_B) else $fatal(1, "FAIL: Scenario 11 — second maker_id should be ID_B");
             assert (exec.fill_qty == 3) else $fatal(1, "FAIL: Scenario 11 — second fill_qty should be 3");
 
-            // Second pool_update
-            wait_pool_update(pu);
-            assert (pu.update_type == PU_HEAD) else $fatal(1, "FAIL: Scenario 11 — second pool_update update_type should be PU_HEAD");
-            assert (pu.head_order_id == ID_B) else $fatal(1, "FAIL: Scenario 11 — second head_order_id should be ID_B");
+            // No pool_update expected on final partial decrement of current head
+            cycle_count = 0;
+            repeat (5) begin
+                @(posedge clk);
+                cycle_count++;
+                assert (pool_update_valid == 0) else $fatal(1, "FAIL: Scenario 11 — unexpected second pool_update");
+            end
 
             $display("PASS: Scenario 11");
         end
@@ -641,7 +682,7 @@ module tb_order_pool;
                 op_type: OP_ADD,
                 order_id: ID_A,
                 qty: 5,
-                list_ptr: ID_A,
+                list_ptr: NULL_PTR,
                 fill_price: TEST_PRICE_BID,
                 maker_side: SIDE_BID
             };
@@ -665,7 +706,7 @@ module tb_order_pool;
                 op_type: OP_CANCEL,
                 order_id: ID_A,
                 qty: '0,
-                list_ptr: '0,
+                list_ptr: NULL_PTR,
                 fill_price: '0,
                 maker_side: SIDE_BID
             };
@@ -686,8 +727,9 @@ module tb_order_pool;
 
             // Should skip ID_A and find ID_B
             wait_pool_update(pu);
-            assert (pu.update_type == PU_FREE) else $fatal(1, "FAIL: Scenario 12 — pool_update update_type should be PU_FREE");
+            assert (pu.update_type == PU_BOTH) else $fatal(1, "FAIL: Scenario 12 — pool_update update_type should be PU_BOTH");
             assert (pu.freed_order_id == ID_A) else $fatal(1, "FAIL: Scenario 12 — should free cancelled slot ID_A");
+            assert (pu.head_order_id == ID_B) else $fatal(1, "FAIL: Scenario 12 — first head_order_id should be ID_B");
 
             // Execution for ID_B
             wait_exec(exec);
@@ -696,8 +738,9 @@ module tb_order_pool;
 
             // Pool update for ID_B
             wait_pool_update(pu);
-            assert (pu.update_type == PU_FREE) else $fatal(1, "FAIL: Scenario 12 — second pool_update update_type should be PU_FREE");
+            assert (pu.update_type == PU_BOTH) else $fatal(1, "FAIL: Scenario 12 — second pool_update update_type should be PU_BOTH");
             assert (pu.freed_order_id == ID_B) else $fatal(1, "FAIL: Scenario 12 — second freed_order_id should be ID_B");
+            assert (pu.head_order_id == NULL_PTR) else $fatal(1, "FAIL: Scenario 12 — second head_order_id should be NULL_PTR");
 
             $display("PASS: Scenario 12");
         end
@@ -716,7 +759,7 @@ module tb_order_pool;
                 op_type: OP_ADD,
                 order_id: ID_A,
                 qty: 5,
-                list_ptr: ID_A,
+                list_ptr: NULL_PTR,
                 fill_price: TEST_PRICE_BID,
                 maker_side: SIDE_BID
             };
@@ -751,6 +794,7 @@ module tb_order_pool;
             assert (exec.fill_qty == 5) else $fatal(1, "FAIL: Scenario 13 — first fill_qty should be 5");
 
             wait_pool_update(pu);
+            assert (pu.update_type == PU_BOTH) else $fatal(1, "FAIL: Scenario 13 — first pool_update update_type should be PU_BOTH");
             assert (pu.freed_order_id == ID_A) else $fatal(1, "FAIL: Scenario 13 — first freed_order_id should be ID_A");
             assert (pu.head_order_id == ID_B) else $fatal(1, "FAIL: Scenario 13 — first head_order_id should be ID_B");
 
@@ -772,8 +816,9 @@ module tb_order_pool;
             assert (exec.fill_qty == 8) else $fatal(1, "FAIL: Scenario 13 — second fill_qty should be 8");
 
             wait_pool_update(pu);
-            assert (pu.update_type == PU_FREE) else $fatal(1, "FAIL: Scenario 13 — second pool_update update_type should be PU_FREE");
+            assert (pu.update_type == PU_BOTH) else $fatal(1, "FAIL: Scenario 13 — second pool_update update_type should be PU_BOTH");
             assert (pu.freed_order_id == ID_B) else $fatal(1, "FAIL: Scenario 13 — second freed_order_id should be ID_B");
+            assert (pu.head_order_id == NULL_PTR) else $fatal(1, "FAIL: Scenario 13 — second head_order_id should be NULL_PTR");
 
             $display("PASS: Scenario 13");
         end

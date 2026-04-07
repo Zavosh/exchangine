@@ -11,6 +11,7 @@ package ob_pkg;
 
    localparam int NUM_ORDERS = 2 ** ORDER_ID_WIDTH;       // total resting order slots across all levels
    localparam int L2_DEPTH = 2 ** PRICE_WIDTH;            // number of possible price levels (2^PRICE_WIDTH)
+   localparam logic [ORDER_ID_WIDTH-1:0] NULL_PTR = '0;   // sentinel for null order-id pointers
 
    // Message type (add/cancel/market) for incoming order requests
    typedef enum logic [1:0] {
@@ -59,7 +60,7 @@ package ob_pkg;
       side_t                       side;
       logic [PRICE_WIDTH-1:0]      price;
       logic [QTY_WIDTH-1:0]        qty;
-      logic [ORDER_ID_WIDTH-1:0]   next_order_id; // LSBs — target of Port B byte-enable writes
+      logic [ORDER_ID_WIDTH-1:0]   next_order_id; // LSBs — target of Port B byte-enable writes, NULL_PTR means end-of-list
    } resting_order_t;
 
    // Types of updates to L1/L2 price levels emitted by order_pool to level_manager via the pool_update
@@ -75,9 +76,9 @@ package ob_pkg;
       pool_update_type_t         update_type;
       logic [PRICE_WIDTH-1:0]    price;          // price level to update in L1/L2
       side_t                     side;           // which side of the book
-      logic [ORDER_ID_WIDTH-1:0] head_order_id;  // new head — equals freed_order_id if level depleted
+      logic [ORDER_ID_WIDTH-1:0] head_order_id;  // new head — NULL_PTR if we reached the end of the list
       logic [ORDER_ID_WIDTH-1:0] freed_order_id; // slot just set to valid=0 — push to free list
-      logic [QTY_WIDTH-1:0]      qty;            // qty at cancel time — used when is_cancel=1 only
+      logic [QTY_WIDTH-1:0]      qty;            // qty at cancel time
    } pool_update_t;
 
    // Operation types issued by level_manager to order_pool via the operation buffer
@@ -86,7 +87,8 @@ package ob_pkg;
       OP_MATCH       = 3'b001,  // match incoming order against resting orders
       OP_CANCEL      = 3'b010,  // cancel resting order by zeroing qty
       OP_MARKET_FAIL = 3'b011,  // MSG_MARKET exhausted book with remaining qty
-      OP_ADD_FAIL    = 3'b100   // ADD rejected — free list empty (book full)
+      OP_ADD_FAIL    = 3'b100,  // ADD rejected — free list empty (book full)
+      OP_ADD_FIRST   = 3'b101   // add resting order to pool as head of FIFO (used when price level is empty)
    } op_type_t;
 
    // Operation envelope for level_manager to order_pool interaction
@@ -94,7 +96,7 @@ package ob_pkg;
       op_type_t                    op_type;
       logic [ORDER_ID_WIDTH-1:0]   order_id;            // OP_ADD: new slot index; OP_CANCEL: slot to zero; OP_MATCH: taker_id; OP_MARKET_FAIL: don't-care
       logic [QTY_WIDTH-1:0]        qty;                 // OP_ADD: qty of new order; OP_MATCH: incoming qty; OP_CANCEL: don't-care; OP_MARKET_FAIL: wasted remainder
-      logic [ORDER_ID_WIDTH-1:0]   list_ptr;            // OP_ADD: tail slot (self-pointer if FIFO is empty); OP_MATCH: head slot to walk; OP_CANCEL: don't-care; OP_MARKET_FAIL: don't-care
+      logic [ORDER_ID_WIDTH-1:0]   list_ptr;            // OP_ADD: tail slot (NULL_PTR if FIFO is empty); OP_MATCH: head slot to walk; OP_CANCEL: don't-care; OP_MARKET_FAIL: don't-care
       logic [PRICE_WIDTH-1:0]      fill_price;          // OP_ADD: price of new order; OP_MATCH: fill price; OP_CANCEL: don't-care; OP_MARKET_FAIL: don't-care
       side_t                       maker_side;          // OP_ADD: side of new order; OP_MATCH: maker side for execution_t; OP_CANCEL: don't-care; OP_MARKET_FAIL: don't-care
    } pool_op_t;

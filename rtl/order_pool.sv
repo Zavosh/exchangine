@@ -77,7 +77,7 @@ module order_pool
             state <= IDLE;
             cur_op <= '0;
             remaining_qty <= '0;
-            cur_order_id <= '0;
+            cur_order_id <= NULL_PTR;
         end else begin
             state <= nc_state;
             cur_op <= nc_cur_op;
@@ -119,12 +119,12 @@ module order_pool
                 if (op_valid) begin
                     nc_cur_op = op_in;
                     unique case (op_in.op_type)
-                        OP_ADD: begin
+                        OP_ADD, OP_ADD_FIRST: begin
                             // Port A write
                             a_valid = 1'b1;
                             a_wr_en = 1'b1;
                             a_addr = op_in.order_id;
-                            a_wr_data = '{valid:1'b1, side:op_in.maker_side, price:op_in.fill_price, qty:op_in.qty, next_order_id:op_in.order_id, default:'0};
+                            a_wr_data = '{valid:1'b1, side:op_in.maker_side, price:op_in.fill_price, qty:op_in.qty, next_order_id:NULL_PTR, default:'0};
                             // Port B write
                             b_valid = 1'b1;
                             b_addr = op_in.list_ptr;
@@ -133,6 +133,11 @@ module order_pool
                             // Emit ack
                             ack_valid = 1'b1;
                             ack_out = '{order_id:op_in.order_id, accepted:1'b1, msg_type:MSG_ADD, remaining_qty:op_in.qty};
+                            if (op_in.op_type == OP_ADD_FIRST) begin
+                                // Update head pointer for price level in case a match overwrote the NULL_PTR there
+                                pool_update_valid = 1'b1;
+                                pool_update = '{update_type:PU_HEAD, price:op_in.fill_price, side:op_in.maker_side, head_order_id:op_in.order_id, default:'0};
+                            end
                         end
                         OP_ADD_FAIL: begin
                             // Emit ack
@@ -208,12 +213,8 @@ module order_pool
                             b_wr_data = a_rd_data;
                             b_wr_data.valid = 1'b0;
                             pool_update_valid = 1'b1;
-                            pool_update = '{update_type: PU_FREE, price:a_rd_data.price, side:a_rd_data.side, freed_order_id:cur_order_id, default:'0};
-                            if (remaining_qty == fill_qty && a_rd_data.next_order_id != cur_order_id) begin
-                                pool_update.update_type = PU_BOTH;
-                                pool_update.head_order_id = a_rd_data.next_order_id;
-                            end
-                            assert final (a_rd_data.next_order_id != cur_order_id || remaining_qty == fill_qty)
+                            pool_update = '{update_type: PU_BOTH, price:a_rd_data.price, side:a_rd_data.side, freed_order_id:cur_order_id, head_order_id:a_rd_data.next_order_id, default:'0};
+                            assert final (a_rd_data.next_order_id != NULL_PTR || remaining_qty == fill_qty)
                                 else $fatal(1, "order_pool: tail consumed with remaining_qty > 0 — level_manager total_qty inconsistency");
                         end
                         if (remaining_qty == fill_qty) begin
@@ -224,13 +225,13 @@ module order_pool
                                 b_wr_byte_en = BE_ALL;
                                 b_wr_data = a_rd_data;
                                 b_wr_data.qty = a_rd_data.qty - fill_qty;
-                                pool_update_valid = 1'b1;
-                                pool_update = '{update_type:PU_HEAD, price:a_rd_data.price, side:a_rd_data.side, head_order_id:cur_order_id, default:'0};
                             end
                             nc_state = IDLE;
                         end
                     end
                     if (!a_rd_data.valid || (a_rd_data.qty == fill_qty && remaining_qty != fill_qty)) begin // includes case where a_rd_data.qty == 0
+                        assert final (a_rd_data.next_order_id != NULL_PTR)
+                            else $fatal(1, "order_pool: attempted to continue MATCH_EXEC past tail");
                         // Port A read next
                         a_valid = 1'b1;
                         a_wr_en = 1'b0;
