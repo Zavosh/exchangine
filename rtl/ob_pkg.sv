@@ -96,9 +96,10 @@ package ob_pkg;
       op_type_t                    op_type;
       logic [ORDER_ID_WIDTH-1:0]   order_id;            // OP_ADD: new slot index; OP_CANCEL: slot to zero; OP_MATCH: taker_id; OP_MARKET_FAIL: don't-care
       logic [QTY_WIDTH-1:0]        qty;                 // OP_ADD: qty of new order; OP_MATCH: incoming qty; OP_CANCEL: don't-care; OP_MARKET_FAIL: wasted remainder
-      logic [ORDER_ID_WIDTH-1:0]   list_ptr;            // OP_ADD: tail slot (NULL_PTR if FIFO is empty); OP_MATCH: head slot to walk; OP_CANCEL: don't-care; OP_MARKET_FAIL: don't-care
+      logic [ORDER_ID_WIDTH-1:0]   list_ptr;            // OP_ADD: tail slot; OP_MATCH: head slot to walk; OP_CANCEL: don't-care; OP_MARKET_FAIL: don't-care
       logic [PRICE_WIDTH-1:0]      fill_price;          // OP_ADD: price of new order; OP_MATCH: fill price; OP_CANCEL: don't-care; OP_MARKET_FAIL: don't-care
       side_t                       maker_side;          // OP_ADD: side of new order; OP_MATCH: maker side for execution_t; OP_CANCEL: don't-care; OP_MARKET_FAIL: don't-care
+      // OP_ADD_FAIL and OP_ADD_FIRST are same as OP_ADD except for OP_ADD_FAIL a taker order_id is used and list_ptr is don't-care
    } pool_op_t;
 
    // Maker-taker fill event (execution report)
