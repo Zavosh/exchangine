@@ -2,6 +2,7 @@
 // Port A: burst read/write for L1 replenishment and eviction
 // Port B: regular read + byte-enable write for out-of-window message handling
 // Port C: regular read + byte-enable write for pool update handling
+// We initialize the memory to a known value at the start.
 // Known limitation: one outstanding read at a time per port
 // Known limitation: write-during-read to same address returns pre-write value (no forwarding)
 // Known limitation: Ports cannot write to the same address in the same cycle, with the following exception:
@@ -13,6 +14,7 @@ module hbm_model #(
     parameter int  DEPTH           = 256,
     parameter int  READ_LATENCY    = 10,
     parameter int  MAX_BURST       = 64,
+    parameter T    INIT_VALUE      = '0,
     localparam int ADDR_WIDTH      = $clog2(DEPTH),
     localparam int NUM_BYTES       = $bits(T) / 8,
     localparam int BURST_LEN_WIDTH = $clog2(MAX_BURST) + 1
@@ -76,6 +78,14 @@ module hbm_model #(
 
     // Internal state
     T mem [0:DEPTH-1];
+
+    // Initialize memory
+    // Note: This works only in simulation. We need to use an HBM Initialization Phase in hardware.
+    initial begin
+        for (int i = 0; i < DEPTH; i++) begin
+            mem[i] = INIT_VALUE;
+        end
+    end
 
     // Port A burst state
     logic                        a_wr_active;
